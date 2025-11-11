@@ -26,36 +26,39 @@ async function getEmployees() {
     conn = await getConnection();
 
     const query = `
-      SELECT 
-        plog.HozOrgan AS id,
-        employees.TabNumber AS tab_number,
-        employees.Name + ' ' + employees.FirstName + ' ' + employees.MidName AS full_name,
-        MAX(plog.TimeVal) AS last_time,
-        plog.Mode AS mode
-      FROM
-          [ORIONSERVER\\SQLSERVER2012].[OrionNavigat].[dbo].[PLogData] as plog
-      LEFT JOIN
-        [ORIONSERVER\\SQLSERVER2012].[OrionNavigat].[dbo].[PList] as employees
-        ON plog.HozOrgan = employees.ID
-      WHERE
-        plog.doorIndex  in (1, 2, 10, 14, 16, 18, 19, 20, 24, 30, 31, 32, 34, 35, 36, 42, 45, 48, 49, 52)
-        AND plog.TimeVal > cast(GETDATE() as date)
-        AND plog.HozOrgan <> 0 AND employees.TabNumber <> ''
-        AND employees.Section <> 62
-        AND plog.Event = 32
-      GROUP BY
-        employees.TabNumber,
-        plog.HozOrgan,
-        employees.Name + ' ' + employees.FirstName + ' ' + employees.MidName,
-        plog.mode
+    SELECT
+		plog.HozOrgan AS id,
+		gid.value AS [guid],
+		employees.TabNumber AS tab_number,
+		employees.Name + ' ' + employees.FirstName + ' ' + employees.MidName AS full_name,
+		MAX(plog.TimeVal) AS last_time,
+		plog.Mode AS mode
+	FROM
+		[ORIONSERVER\\SQLSERVER2012].[OrionNavigat].[dbo].[PLogData] as plog
+		LEFT JOIN [ORIONSERVER\\SQLSERVER2012].[OrionNavigat].[dbo].[PList] as employees
+			ON plog.HozOrgan = employees.ID
+		LEFT JOIN [ORIONSERVER\\SQLSERVER2012].[OrionNavigat].[dbo].[ClientFieldsValues] as gid
+			ON gid.owner = plog.HozOrgan AND gid.field_id = 3
+	WHERE
+		plog.doorIndex  in (1, 2, 10, 14, 16, 18, 19, 20, 24, 30, 31, 32, 34, 35, 36, 42, 45, 48, 49, 52)
+		AND plog.TimeVal > cast(GETDATE() as date)
+		AND plog.HozOrgan <> 0 AND (gid.value is not NULL AND gid.value <> '')
+		AND employees.Section <> 62
+		AND plog.Event = 32
+	GROUP BY
+		employees.TabNumber,
+		gid.value,
+		plog.HozOrgan,
+		employees.Name + ' ' + employees.FirstName + ' ' + employees.MidName,
+		plog.mode
     `;
 
     const result = await conn.query(query);
 
     const grouped = {};
     for (const row of result) {
-      if (!grouped[row.tab_number]) grouped[row.tab_number] = [];
-      grouped[row.tab_number].push(row);
+      if (!grouped[row.guid]) grouped[row.guid] = [];
+      grouped[row.guid].push(row);
     }
 
     const payload = Object.values(grouped).map((events) => {
@@ -69,6 +72,7 @@ async function getEmployees() {
       return {
         id: last.id,
         tab_number: last.tab_number,
+		guid: last.guid,
         name: last.full_name,
         is_present,
         time: last.last_time,
