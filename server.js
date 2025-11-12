@@ -37,6 +37,7 @@ async function pollAndBroadcast() {
         changed.push({
           id: emp.id,
           tab_number: emp.tab_number,
+		  guid: emp.guid,
           name: emp.name,
           is_present: emp.is_present,
           time: emp.time,
